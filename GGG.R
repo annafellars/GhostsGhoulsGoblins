@@ -104,3 +104,99 @@ kaggle <- nb_preds|>
 
 ##write out file
 vroom_write(x = kaggle, file = "./GGGNB.csv", delim=",")
+
+#################################################################################
+#boosted trees
+library(bonsai)
+library(lightgbm)
+
+boost_mod <- boost_tree(tree_depth=tune(),
+                        trees=tune(),
+                        learn_rate=tune()) |>
+  set_engine("lightgbm") |>
+  set_mode("classification")
+
+boost_wf <- workflow() |>
+  add_recipe(my_recipe) |>
+  add_model(boost_mod)
+
+## Set up grid and tuning values
+boost_tuning_params <- grid_regular(tree_depth(),
+                                 trees(),
+                                 learn_rate(),
+                                 levels = 5)
+
+##Split data for CV
+boost_folds <- vfold_cv(train_data, v = 5, repeats = 1)
+
+##Run the CV
+boost_CV_results <- boost_wf |>
+  tune_grid(resamples = boost_folds,
+            grid = boost_tuning_params,
+            metrics = metric_set(roc_auc, f_meas, sens, recall, 
+                                 precision, accuracy))
+#Find best tuning parameters
+boost_best_tune <- boost_CV_results |>
+  select_best(metric = "roc_auc")
+
+##finalize the workflow and fit it
+boost_final <- boost_wf |>
+  finalize_workflow(boost_best_tune) |>
+  fit(data = train_data)
+
+##predict
+boost_preds <- boost_final |>
+  predict(new_data = test_data, type = "class")
+
+kaggle <- boost_preds|>
+  bind_cols(test_data) |>
+  select(id, .pred_class) |>
+  rename(type = .pred_class)
+
+##write out file
+vroom_write(x = kaggle, file = "./GGGboost.csv", delim=",")
+
+########################################################################################
+#Bart model
+
+bart_mod <- bart(trees=tune()) |>
+  set_engine("dbarts") |>
+  set_mode("classification")
+
+bart_wf <- workflow() |>
+  add_recipe(my_recipe) |>
+  add_model(bart_mod)
+
+## Set up grid and tuning values
+bart_tuning_params <- grid_regular(trees(),
+                                   levels = 5)
+
+##Split data for CV
+bart_folds <- vfold_cv(train_data, v = 5, repeats = 1)
+
+##Run the CV
+bart_CV_results <- bart_wf |>
+  tune_grid(resamples = bart_folds,
+            grid = bart_tuning_params,
+            metrics = metric_set(f_meas, sens, recall, 
+                                 accuracy))
+#Find best tuning parameters
+bart_best_tune <- bart_CV_results |>
+  select_best(metric = "accuracy")
+
+##finalize the workflow and fit it
+bart_final <- bart_wf |>
+  finalize_workflow(bart_best_tune) |>
+  fit(data = train_data)
+
+##predict
+bart_preds <- bart_final |>
+  predict(new_data = test_data, type = "class")
+
+kaggle <- bart_preds|>
+  bind_cols(test_data) |>
+  select(id, .pred_class) |>
+  rename(type = .pred_class)
+
+##write out file
+vroom_write(x = kaggle, file = "./GGGbart.csv", delim=",")
