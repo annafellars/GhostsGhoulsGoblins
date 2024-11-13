@@ -29,7 +29,8 @@ rmse_vec(train_data[is.na(missing_data)],
 my_recipe <- recipe(type~., data = train_data) |>
   step_mutate_at(color, fn = factor) |>
   step_lencode_glm(all_nominal_predictors(), outcome = vars(type)) |>
-  step_normalize(all_nominal_predictors())
+  step_normalize(all_nominal_predictors()) |>
+  step_smote(all_outcomes(), neighbors = 4)
 
 prepped_recipe <- prep(my_recipe)
 show <- bake(prepped_recipe, new_data = train_data)
